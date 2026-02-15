@@ -1,75 +1,86 @@
 #include "DrawingEngine.h"
 
-DrawingEngine::DrawingEngine() {}
+// Shader tính toán tọa độ (Vertex)
+const char* vertexShaderCode =
+        "attribute vec4 vPosition;"
+        "void main() {"
+        "  gl_Position = vPosition;"
+        "}";
 
+// Shader tô màu (Fragment) - Ở đây đang set màu Cam (Đỏ 1.0, Xanh lá 0.5, Xanh dương 0.0)
+const char* fragmentShaderCode =
+        "precision mediump float;"
+        "void main() {"
+        "  gl_FragColor = vec4(1.0, 0.5, 0.0, 1.0);"
+        "}";
+
+DrawingEngine::DrawingEngine() : screenWidth(0), screenHeight(0), shaderProgram(0) {}
 DrawingEngine::~DrawingEngine() {}
 
-GLuint DrawingEngine::loadShader(GLenum type, const char* shaderCode) {
+GLuint DrawingEngine::loadShader(GLenum type, const char *shaderCode) {
     GLuint shader = glCreateShader(type);
-    glShaderSource(shader, 1, &shaderCode, NULL);
+    glShaderSource(shader, 1, &shaderCode, nullptr);
     glCompileShader(shader);
     return shader;
 }
 
 void DrawingEngine::onSurfaceCreated() {
+    glClearColor(0.2f, 0.2f, 0.2f, 1.0f); // Nền xám đen
+
+    // Biên dịch và khởi tạo Shader
     GLuint vertexShader = loadShader(GL_VERTEX_SHADER, vertexShaderCode);
     GLuint fragmentShader = loadShader(GL_FRAGMENT_SHADER, fragmentShaderCode);
 
-    program = glCreateProgram();
-    glAttachShader(program, vertexShader);
-    glAttachShader(program, fragmentShader);
-    glLinkProgram(program);
-
-    vPositionHandle = glGetAttribLocation(program, "vPosition");
-    LOGI("OpenGL initialized");
+    shaderProgram = glCreateProgram();
+    glAttachShader(shaderProgram, vertexShader);
+    glAttachShader(shaderProgram, fragmentShader);
+    glLinkProgram(shaderProgram);
 }
 
 void DrawingEngine::onSurfaceChanged(int width, int height) {
-    viewportWidth = width;
-    viewportHeight = height;
+    screenWidth = width;
+    screenHeight = height;
     glViewport(0, 0, width, height);
 }
 
-Point DrawingEngine::normalize(float x, float y) {
-    // Chuyển từ tọa độ Screen (0 -> Width) sang OpenGL (-1 -> 1)
-    float nx = (x / viewportWidth) * 2.0f - 1.0f;
-    float ny = -((y / viewportHeight) * 2.0f - 1.0f); // Đảo trục Y
-    return {nx, ny};
-}
-
+// Khi vừa chạm ngón tay xuống màn hình
 void DrawingEngine::onTouchDown(float x, float y) {
-    currentStroke.clear();
-    currentStroke.push_back(normalize(x, y));
+    lineVertices.clear(); // Xóa nét cũ đi để vẽ nét mới
+    onTouchMove(x, y);
 }
 
+// Khi lướt ngón tay
 void DrawingEngine::onTouchMove(float x, float y) {
-    currentStroke.push_back(normalize(x, y));
+    if (screenWidth == 0 || screenHeight == 0) return;
+
+    // Chuyển đổi tọa độ Pixel của điện thoại sang tọa độ OpenGL (-1 đến 1)
+    float glX = (x / (float)screenWidth) * 2.0f - 1.0f;
+    float glY = -((y / (float)screenHeight) * 2.0f - 1.0f); // Trục Y của OpenGL ngược với Android
+
+    lineVertices.push_back(glX);
+    lineVertices.push_back(glY);
 }
 
 void DrawingEngine::onTouchUp() {
-    allStrokes.push_back(currentStroke);
-    currentStroke.clear();
+    // Nhấc tay lên (hiện tại chưa cần xử lý thêm)
 }
 
 void DrawingEngine::render() {
-    glClearColor(1.0f, 1.0f, 1.0f, 1.0f); // Nền trắng
     glClear(GL_COLOR_BUFFER_BIT);
 
-    glUseProgram(program);
-    glEnableVertexAttribArray(vPositionHandle);
+    if (lineVertices.empty()) return;
 
-    // Vẽ các nét vẽ cũ
-    for (const auto& stroke : allStrokes) {
-        if (stroke.size() < 2) continue;
-        glVertexAttribPointer(vPositionHandle, 2, GL_FLOAT, GL_FALSE, 0, stroke.data());
-        glDrawArrays(GL_LINE_STRIP, 0, stroke.size());
-    }
+    glUseProgram(shaderProgram);
 
-    // Vẽ nét vẽ hiện tại
-    if (currentStroke.size() >= 2) {
-        glVertexAttribPointer(vPositionHandle, 2, GL_FLOAT, GL_FALSE, 0, currentStroke.data());
-        glDrawArrays(GL_LINE_STRIP, 0, currentStroke.size());
-    }
+    // Kích hoạt biến vPosition trong Vertex Shader
+    GLuint positionHandle = glGetAttribLocation(shaderProgram, "vPosition");
+    glEnableVertexAttribArray(positionHandle);
 
-    glDisableVertexAttribArray(vPositionHandle);
+    // Đẩy dữ liệu tọa độ từ C++ lên GPU
+    glVertexAttribPointer(positionHandle, 2, GL_FLOAT, GL_FALSE, 0, lineVertices.data());
+
+    // Yêu cầu GPU vẽ các điểm thành một đường liền mạch (LINE_STRIP)
+    glDrawArrays(GL_LINE_STRIP, 0, lineVertices.size() / 2);
+
+    glDisableVertexAttribArray(positionHandle);
 }

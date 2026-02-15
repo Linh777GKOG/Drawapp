@@ -1,8 +1,6 @@
 #include <jni.h>
-#include <string>
 #include "DrawingEngine.h"
 
-// Khởi tạo Engine
 DrawingEngine* engine = new DrawingEngine();
 
 extern "C" JNIEXPORT void JNICALL
@@ -15,7 +13,6 @@ Java_com_example_drawapp_CanvasView_nativeSurfaceChanged(JNIEnv* env, jobject /*
     engine->onSurfaceChanged(width, height);
 }
 
-// Lưu ý: Tôi thêm hàm Render này để gọi từ onDrawFrame của Kotlin
 extern "C" JNIEXPORT void JNICALL
 Java_com_example_drawapp_CanvasView_nativeRender(JNIEnv* env, jobject /* this */) {
     engine->render();
@@ -23,9 +20,10 @@ Java_com_example_drawapp_CanvasView_nativeRender(JNIEnv* env, jobject /* this */
 
 extern "C" JNIEXPORT void JNICALL
 Java_com_example_drawapp_CanvasView_nativeOnTouch(JNIEnv* env, jobject /* this */, jint action, jfloat x, jfloat y) {
+    // action: 0 = DOWN, 1 = UP, 2 = MOVE
     switch (action) {
-        case 0: engine->onTouchDown(x, y); break; // DOWN
-        case 1: engine->onTouchUp(); break;       // UP
-        case 2: engine->onTouchMove(x, y); break; // MOVE
+        case 0: engine->onTouchDown(x, y); break;
+        case 1: engine->onTouchUp(); break;
+        case 2: engine->onTouchMove(x, y); break;
     }
 }
